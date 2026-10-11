@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "delin.monitor",
+  "name": "Display Layout",
+  "version": "1.0.0",
+  "author": "De Lin",
+  "license": "MIT",
+  "description": "Display panel with main-display and monitor arrangement controls",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Display Layout",
+    "description": "Brightness, scale, main display, and monitor arrangement",
+    "category": "System",
+    "allowMultiple": false
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.monitor"
+  }
+}
