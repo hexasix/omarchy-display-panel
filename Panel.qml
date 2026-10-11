@@ -51,6 +51,17 @@ Panel {
   // can be open at a time, so one slot is enough.
   property int openPositionIndex: -1
 
+  // First-run setup. setup.sh does the editing; these track what is left before
+  // one reload can bring the plugin to life.
+  property bool setupWroteRequire: false
+  property bool setupWroteLua: false
+  property bool setupReloaded: false
+
+  // setup.sh sits next to this file. Qt.resolvedUrl hands back a file:// URL;
+  // Process wants a plain path.
+  readonly property string setupScriptPath:
+    Qt.resolvedUrl("setup.sh").toString().replace(/^file:\/\//, "")
+
   // Enabled displays only: a disabled panel has no workspaces to hold.
   readonly property var mainOptions: {
     var options = []
@@ -324,6 +335,19 @@ Panel {
     return /^[A-Za-z0-9._-]+$/.test(String(name || ""))
   }
 
+  // First-run setup lives in setup.sh, next to this file — see its header for
+  // why it is a locked script rather than QML.
+
+  // One reload, once both halves of the first-run setup exist. Firing earlier
+  // would reload a config that is still missing one of them, which is the exact
+  // silent no-op the setup exists to avoid.
+  function setupMaybeReload() {
+    if (root.setupReloaded) return
+    if (!root.setupWroteRequire || !root.setupWroteLua) return
+    root.setupReloaded = true
+    setupReload.restart()
+  }
+
   // ---- Arrangement ----
   // Hyprland positions monitors in logical (post-scale) coordinates.
   function logicalWidth(entry) {
@@ -412,6 +436,19 @@ Panel {
   // accumulates stale rules.
   function layoutLua() {
     var main = root.pendingMainDisplay !== "" ? root.pendingMainDisplay : root.mainDisplay
+    // On a fresh install nothing has been chosen yet and the workspace read may
+    // not have landed, so fall back to the focused output and then to the first
+    // enabled one — the file still has to be written on the very first run, or
+    // there is nothing for the require to pick up.
+    if (!safeMonitorName(main)) main = root.focusedMonitor
+    if (!safeMonitorName(main)) {
+      for (var i = 0; i < root.layout.length; i++) {
+        if (root.layout[i].enabled && safeMonitorName(root.layout[i].name)) {
+          main = root.layout[i].name
+          break
+        }
+      }
+    }
     if (!safeMonitorName(main)) return ""
 
     var out = "-- Display layout - written by the \"My Display\" panel (plugin delin.monitor).\n"
@@ -453,6 +490,8 @@ Panel {
     if (text === "" || text === root.lastLayoutLua) return
     root.lastLayoutLua = text
     layoutFile.setText(text)
+    root.setupWroteLua = true
+    root.setupMaybeReload()
   }
 
   // Called on refresh: heals the file when a scale was changed from somewhere
@@ -460,6 +499,9 @@ Panel {
   // derived state is still one reload behind the pending one.
   function maybeSyncLayout() {
     if (root.pendingMainDisplay !== "") return
+    // Before the first geometry read lands there is no arrangement to write;
+    // writing anyway would blank the rules until the next refresh.
+    if (root.layout.length === 0) return
     root.syncLayoutFile()
 
     // Drop overrides the reload has now made real.
@@ -670,7 +712,10 @@ Panel {
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
-  Component.onCompleted: refresh()
+  Component.onCompleted: {
+    refresh()
+    setupProc.running = true
+  }
 
   // KeyboardPanel primes focus at open-time, so SUPER-bound IPC summons land
   // with j/k ready to navigate. Keep a default landing point, but don't paint
@@ -797,6 +842,40 @@ Panel {
     watchChanges: false
     atomicWrites: true
     printErrors: false
+  }
+
+  // The require in hyprland.lua is added by setup.sh rather than from here: the
+  // shell instantiates this panel more than once, and a check-then-edit split
+  // across two QML instances is exactly the race that would add the line twice.
+  // The script takes a lock and does the whole thing in one process.
+  Process {
+    id: setupProc
+    command: ["bash", root.setupScriptPath]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        // "present" means it had nothing to do; anything else (including a
+        // missing hyprland.lua) leaves us quiet.
+        if (String(text || "").trim() !== "added") return
+        root.setupWroteRequire = true
+        setupNotifyProc.running = true
+        root.setupMaybeReload()
+      }
+    }
+  }
+
+  Process {
+    id: setupNotifyProc
+    command: ["omarchy-notification-send", "-u", "low", "-g", "󰍹", "-t", "12000",
+      "Display Layout set itself up",
+      "Added require(\"hypr.display-layout\") to hyprland.lua. A backup of the old file sits next to it."]
+  }
+
+  Timer {
+    id: setupReload
+    interval: 300
+    repeat: false
+    onTriggered: if (!mainReloadProc.running) mainReloadProc.running = true
   }
 
   // Geometry for the arrangement controls: hyprctl is the only source that

@@ -23,28 +23,37 @@ DISPLAYS never worked (see [About `hyprctl keyword`](#about-hyprctl-keyword)).
 
 ## Install
 
-```bash
-git clone <this repo> ~/Documents/omarchy-display-panel
-~/Documents/omarchy-display-panel/install.sh
-```
-
-`install.sh` is idempotent — re-run it whenever you like. It does four things:
-
-1. Copies the plugin into `~/.config/omarchy/plugins/delin.monitor/`.
-2. Creates `~/.config/hypr/display-layout.lua` if it is missing.
-3. Adds `require("hypr.display-layout")` to `~/.config/hypr/hyprland.lua`
-   (backing the file up first).
-4. Reloads the config and restarts the shell.
-
-You can also install it the Omarchy way, though that skips steps 2 and 3:
+### The Omarchy way
 
 ```bash
 omarchy plugin add <repo-url> --enable
 ```
 
-> Step 3 is not optional. Without that `require`, the panel still writes its file
-> and nothing reports an error — but the rules are **never read**. That is
-> exactly how Omarchy issue #9422 happens.
+That is the whole install. Omarchy copies the plugin folder and nothing else, so
+the panel completes the setup itself the first time it runs: it writes
+`~/.config/hypr/display-layout.lua`, adds `require("hypr.display-layout")` to
+`hyprland.lua` (leaving a backup beside it), reloads, and says so in a
+notification.
+
+> That require is not optional. Without it the panel still writes its file and
+> nothing reports an error — but the rules are **never read**. That is exactly
+> how Omarchy issue #9422 happens, which is why the plugin does not leave it for
+> the user to remember.
+
+The setup lives in `setup.sh`, which takes a lock and does its check-and-edit in
+one process: the shell instantiates a bar-widget panel more than once, and a
+check-then-edit split across instances would add the line twice.
+
+### From a checkout
+
+```bash
+git clone <this repo> ~/Documents/omarchy-display-panel
+~/Documents/omarchy-display-panel/install.sh
+```
+
+`install.sh` is idempotent — re-run it after editing the sources here. It copies
+the plugin into place, seeds the config file, runs the very same `setup.sh` the
+panel runs, then reloads and restarts the shell.
 
 ## Usage
 
@@ -165,25 +174,26 @@ Omarchy 状态栏的显示器面板,在官方 Display 面板基础上补了两�
 
 ## 安装
 
-```bash
-git clone <这个仓库> ~/Documents/omarchy-display-panel
-~/Documents/omarchy-display-panel/install.sh
-```
-
-`install.sh` 是幂等的,可以反复运行。它做四件事:
-
-1. 把插件复制到 `~/.config/omarchy/plugins/delin.monitor/`。
-2. 如果 `~/.config/hypr/display-layout.lua` 不存在就创建它。
-3. 往 `~/.config/hypr/hyprland.lua` 里加一行 `require("hypr.display-layout")`(会先备份)。
-4. 重载配置并重启 shell。
-
-也可以用 Omarchy 自己的方式装,但那样**不会**做第 2、3 步:
+### Omarchy 方式
 
 ```bash
 omarchy plugin add <仓库地址> --enable
 ```
 
-> 第 3 步不能省。少了那行 `require`,面板照常写文件、也不报任何错,但规则**永远不会被读取** —— 这正是 Omarchy 仓库里那个 issue #9422 的成因。
+这一条就够了。Omarchy 只会复制插件目录,剩下的初始化由面板首次运行时自己完成:创建 `~/.config/hypr/display-layout.lua`、往 `hyprland.lua` 加一行 `require("hypr.display-layout")`(旁边留一份备份)、重载配置,并弹一条通知告诉你它做了什么。
+
+> 那行 `require` 不能省。少了它,面板照常写文件、也不报任何错,但规则**永远不会被读取** —— 这正是 Omarchy 仓库里那个 issue #9422 的成因。所以插件不把这步留给用户去记。
+
+初始化逻辑在 `setup.sh` 里。它加了文件锁,并在同一个进程内完成「检查 + 修改」:shell 会把一个 bar-widget 面板实例化不止一次,而把检查与修改拆在两个实例里就会写出重复的行。
+
+### 从源码安装
+
+```bash
+git clone <这个仓库> ~/Documents/omarchy-display-panel
+~/Documents/omarchy-display-panel/install.sh
+```
+
+`install.sh` 是幂等的,改完源码重跑即可。它复制插件、创建配置文件、执行**与面板完全相同的那个 `setup.sh`**,然后重载并重启 shell。
 
 ## 使用
 

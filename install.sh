@@ -38,31 +38,13 @@ fi
 
 # 3. Require that file. Without this the rules are written but never read --
 #    silently, with no config error to point at.
-if [[ -f $HYPRLAND_LUA ]]; then
-  if grep -q 'hypr\.display-layout' "$HYPRLAND_LUA"; then
-    echo "already required in ${HYPRLAND_LUA}"
-  else
-    cp "$HYPRLAND_LUA" "${HYPRLAND_LUA}.bak.$(date +%Y%m%d-%H%M%S)"
-    if grep -q 'require("hypr\.monitors")' "$HYPRLAND_LUA"; then
-      awk '
-        { print }
-        /require\("hypr\.monitors"\)/ && !done {
-          print "-- Display Layout panel state (plugin delin.monitor)."
-          print "require(\"hypr.display-layout\")"
-          done = 1
-        }
-      ' "$HYPRLAND_LUA" >"${HYPRLAND_LUA}.tmp"
-    else
-      cp "$HYPRLAND_LUA" "${HYPRLAND_LUA}.tmp"
-      printf '\n-- Display Layout panel state (plugin delin.monitor).\nrequire("hypr.display-layout")\n' \
-        >>"${HYPRLAND_LUA}.tmp"
-    fi
-    mv "${HYPRLAND_LUA}.tmp" "$HYPRLAND_LUA"
-    echo "require added -> ${HYPRLAND_LUA} (backup alongside)"
-  fi
-else
-  echo "warning: ${HYPRLAND_LUA} not found; add require(\"hypr.display-layout\") by hand" >&2
-fi
+# setup.sh is the very same script the panel runs on startup, so the installed
+# and the freshly-installed paths cannot drift apart.
+case "$(bash "${REPO_DIR}/setup.sh" 2>/dev/null || true)" in
+added) echo "require added -> ${HYPRLAND_LUA} (backup alongside)" ;;
+present) echo "already required in ${HYPRLAND_LUA}" ;;
+*) echo "warning: could not read ${HYPRLAND_LUA}; add require(\"hypr.display-layout\") by hand" >&2 ;;
+esac
 
 # 4. Pick everything up. Plugin code hot-reloads, but the bar widget component
 #    does not -- a restart is what actually makes edits visible.
